@@ -1,4 +1,12 @@
-torch --index-url https://download.pytorch.org/whl/cu130
+# torch --index-url https://download.pytorch.org/whl/cu130
+torchvision
+safetensors>=0.3.0
+huggingface_hub>=0.20.0
+pillow>=9.0.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+tqdm>=4.65.0
+# torch --index-url https://download.pytorch.org/whl/cu130
 torchvision
 safetensors>=0.3.0
 huggingface_hub>=0.20.0
@@ -12,3 +20,13 @@ matplotlib>=3.5.0
 fashn-human-parser>=0.1.1
 flask
 pyngrok
+git+https://github.com/openai/CLIP.git
+ftfy
+regex
+# High-Fidelity VTON Deps
+diffusers>=0.25.0
+transformers
+accelerate
+einops
+omegaconf
+protobuf

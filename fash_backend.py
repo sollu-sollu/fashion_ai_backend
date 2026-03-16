@@ -5,23 +5,17 @@ import sys
 REPO_NAME = "fashion"
 
 # Clone if not exists
-if not os.path.exists(REPO_NAME) and not os.getcwd().endswith(REPO_NAME):
+if not os.path.exists(REPO_NAME):
     print(f"📂 Cloning {REPO_NAME}...")
-    subprocess.run(["git", "clone", f"https://github.com/fashn-AI/fashn-vton-1.5.git", "fashion"], check=True)
-    os.chdir(REPO_NAME)
-
-# Change directory safely
-if os.path.exists(REPO_NAME) and not os.getcwd().endswith(REPO_NAME):
-    print(f"📂 Entering {REPO_NAME} directory...")
-    os.chdir(REPO_NAME)
+    subprocess.run(["git", "clone", "https://github.com/fashn-AI/fashn-vton-1.5.git", REPO_NAME], check=True)
 
 print(f"📍 Current Directory: {os.getcwd()}")
 print("system executable", sys.executable)
 
-if not os.path.exists("./weights/model.safetensors"):
+if not os.path.exists("fashion/weights/model.safetensors"):
     print("⏳ Downloading weights (this may take a while)...")
     # Use sys.executable to ensure we use the same python interpreter
-    subprocess.run([sys.executable, "scripts/download_weights.py", "--weights-dir", "./weights"], check=True)
+    subprocess.run([sys.executable, "fashion/scripts/download_weights.py", "--weights-dir", "fashion/weights"], check=True)
     print("✅ Weights Downloaded!")
 else:
     print("✅ Weights already exist!")
@@ -32,11 +26,12 @@ from fashion.src.fashn_vton import TryOnPipeline
 from PIL import Image
 import io
 import base64
+from cross_check import validate_gender_match
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"🔧 Loading on {device.upper()}...")
 
-pipeline = TryOnPipeline("./weights", device=device)
+pipeline = TryOnPipeline("fashion/weights", device=device)
 print("✅ Model Loaded!")
 
 
@@ -47,7 +42,7 @@ import threading
 app = Flask(__name__)
 
 # ⚠️ PUT YOUR NGROK TOKEN HERE ⚠️
-NGROK_TOKEN = "YOUR_TOKEN_HERE"
+NGROK_TOKEN = "36EnpN0f0tx9hre6EMpt1jRpHeb_38GYquy1KabEJGskmKeHL"
 
 if not NGROK_TOKEN or NGROK_TOKEN == "YOUR_TOKEN_HERE":
     raise ValueError("❌ Please enter your Ngrok token!")
@@ -105,6 +100,22 @@ def tryon():
         
         print(f"👕 Processing {category}...")
         
+        # --- NEW: CROSS-CHECK VALIDATION ---
+        print("🔍 Running gender cross-check...")
+        is_valid, msg, p_gen, g_gen = validate_gender_match(person_img, garment_img, category)
+        
+        if not is_valid:
+            print(f"❌ Validation Failed: {msg}")
+            return jsonify({
+                "success": False, 
+                "error": "validation_failed",
+                "message": f"Chosen garment doesn't match the selected person's category. ({msg})",
+                "details": {"person": p_gen, "garment": g_gen}
+            }), 400
+        
+        print("✅ Validation Passed!")
+        # ----------------------------------
+        
         # Run inference
         result = pipeline(
             person_image=person_img,
@@ -122,6 +133,9 @@ def tryon():
         result_b64 = image_to_base64(result_image)
         
         print("✅ Done!")
+        
+        if torch.cuda.is_available():
+            print(f"📉 VRAM Usage: {torch.cuda.memory_allocated() / 1024**2:.1f}MB / {torch.cuda.get_device_properties(0).total_memory / 1024**2:.1f}MB")
         
         return jsonify({
             "success": True,
