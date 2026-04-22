@@ -1,32 +1,39 @@
-# torch --index-url https://download.pytorch.org/whl/cu130
+# === Core PyTorch (install separately with CUDA) ===
+# pip install torch --index-url https://download.pytorch.org/whl/cu121
 torchvision
 safetensors>=0.3.0
-huggingface_hub>=0.20.0
 pillow>=9.0.0
-numpy>=1.21.0
-opencv-python>=4.5.0
-tqdm>=4.65.0
-# torch --index-url https://download.pytorch.org/whl/cu130
-torchvision
-safetensors>=0.3.0
-huggingface_hub>=0.20.0
-pillow>=9.0.0
-numpy>=1.21.0
+numpy<2
 opencv-python>=4.5.0
 tqdm>=4.65.0
 einops>=0.6.0
-onnxruntime-gpu>=1.14.0
 matplotlib>=3.5.0
-fashn-human-parser>=0.1.1
+
+# === Flask API ===
 flask
 pyngrok
+
+# === HuggingFace ===
+huggingface_hub>=0.21.4
+diffusers==0.25.1
+transformers>=4.38.1
+accelerate
+
+# === CLIP (Gender Cross-Check) ===
 git+https://github.com/openai/CLIP.git
 ftfy
 regex
-# High-Fidelity VTON Deps
-diffusers>=0.25.0
-transformers
-accelerate
-einops
+
+# === Fashn-VTON ===
+fashn-human-parser>=0.1.1
+
+# === IDM-VTON ===
 omegaconf
 protobuf
+onnxruntime-gpu>=1.14.0
+
+# === AnyDoor ===
+open-clip-torch
+pytorch-lightning
+albumentations
+xformers

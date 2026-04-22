@@ -1,8 +1,14 @@
 import torch
 import clip
 from PIL import Image
-import io
-import base64
+import numpy as np
+import sys
+
+print(f"📦 Python version: {sys.version}")
+try:
+    print(f"📦 Numpy version: {np.__version__}")
+except Exception as e:
+    print(f"⚠️ Numpy check error: {e}")
 
 class CrossCheckValidator:
     def __init__(self, device=None):
@@ -12,28 +18,12 @@ class CrossCheckValidator:
             self.device = device
             
         print(f"🎨 Initializing CLIP on {self.device.upper()}...")
-        # We use ViT-B/32 for a good balance of speed and accuracy
         self.model, self.preprocess = clip.load("ViT-B/32", device=self.device)
-        
-        # Define our text prompts for zero-shot classification - Using more descriptive, weighted terms
-        self.gender_prompts = [
-            "a photo of a man, masculine face, male person", 
-            "a photo of a woman, feminine face, female person"
-        ]
-        self.garment_prompts = [
-            "masculine clothing, menswear, clothing for men, suit, t-shirt for men", 
-            "feminine clothing, womenswear, clothing for women, dress, blouse, skirt"
-        ]
-        
-        print("✅ CLIP Validator Ready with enhanced prompts!")
+        print("✅ CLIP Validator Ready with object & gender verification!")
 
     def classify_advanced(self, image, class_labels):
-        """
-        Classifies an image using ensembled prompts for each label.
-        class_labels: dictionary where key is class name, value is list of prompts.
-        """
+        """Classifies an image using ensembled prompts for each label."""
         image_input = self.preprocess(image).unsqueeze(0).to(self.device)
-        
         all_probs = {}
         
         with torch.no_grad():
@@ -45,43 +35,76 @@ class CrossCheckValidator:
                 text_features = self.model.encode_text(text_tokens)
                 text_features /= text_features.norm(dim=-1, keepdim=True)
                 
-                # Average similarity across all prompts for this label
                 similarities = (image_features @ text_features.T).mean(dim=-1)
                 all_probs[label] = similarities.item()
                 
-        # Result with highest average similarity
         best_label = max(all_probs, key=all_probs.get)
         
-        # Normalize to look like probabilities (for logging)
-        total = sum(all_probs.values())
+        # Log probabilities
+        total = sum(all_probs.values()) + 1e-9
         print(f"   [CLIP] Confidence: { {k: f'{(v/total)*100:.1f}%' for k,v in all_probs.items()} }")
         
         return best_label
 
     def validate_match(self, person_image, garment_image, category="tops"):
-        """
-        Validates if the garment matches the person's gender using ensembled prompts.
-        """
         try:
-            # 1. Classify Person
-            print(f"   [CLIP] Classifying Person (Target: {category})...")
+            category_lower = category.lower()
+
+            # ==========================================
+            # 1. OBJECT VERIFICATION (Is it really a shoe/bag/shirt?)
+            # ==========================================
+            print(f"   [CLIP] Verifying Object Type (Target: {category})...")
+            
+            # Define broad object categories
+            object_classes = {
+                "clothing": ["a photo of clothing, a shirt, pants, dress, jacket, apparel"],
+                "shoe": ["a photo of a shoe, sneakers, footwear, boots, heels"],
+                "bag": ["a photo of a bag, handbag, backpack, purse, luggage"],
+                "hat": ["a photo of a hat, cap, beanie, headwear"],
+                "invalid": ["a photo of an animal, dog, cat, car, food, landscape, random object"]
+            }
+            
+            detected_object = self.classify_advanced(garment_image, object_classes)
+            
+            # If the image is completely invalid (like a dog)
+            if detected_object == "invalid":
+                return False, "Uploaded image does not appear to be a fashion item (detected random object/animal).", "unknown", detected_object
+
+            # Validate that the selected category somewhat matches the visual item
+            is_accessory_cat = any(x in category_lower for x in ["shoe", "bag", "hat", "accessor", "jewel", "watch", "glasses"])
+            
+            if is_accessory_cat:
+                if detected_object == "clothing":
+                    # They uploaded a shirt but selected "accessories"
+                    return False, f"You selected '{category}' but the image looks like clothing.", "unknown", detected_object
+                
+                print(f"   [CLIP] Accessory visually verified ({detected_object}). Bypassing gender check.")
+                return True, "Accessory visually verified", "neutral", detected_object
+
+            else:
+                if detected_object in ["shoe", "bag", "hat"]:
+                    # They uploaded a shoe but selected "tops"
+                    return False, f"You selected a clothing category ('{category}') but uploaded an accessory ({detected_object}).", "unknown", detected_object
+
+
+            # ==========================================
+            # 2. GENDER MATCHING (Only for Clothing)
+            # ==========================================
+            print(f"   [CLIP] Classifying Person Gender...")
             person_classes = {
-                "male": ["a photo of a man", "a masculine face", "a man with a beard", "a male human", "a portrait of a guy", "short hair man", "businessman"],
-                "female": ["a photo of a woman", "a feminine face", "a woman with long hair", "a female human", "a lady", "woman wearing makeup", "fashion model woman"]
+                "male": ["a photo of a man", "a masculine face", "a male human", "short hair man"],
+                "female": ["a photo of a woman", "a feminine face", "a female human", "a lady"]
             }
             person_gender = self.classify_advanced(person_image, person_classes)
             
-            # 2. Classify Garment
-            print("   [CLIP] Classifying Garment...")
-            
-            # If it's a dress, it's overwhelmingly likely to be female
-            if category == 'dresses' or category == 'one-pieces':
+            print("   [CLIP] Classifying Garment Gender...")
+            if category_lower in ['dresses', 'one-pieces', 'skirt']:
                 garment_gender = "female"
-                print("   [CLIP] Auto-detected FEMALE for Dress/One-piece category")
+                print("   [CLIP] Auto-detected FEMALE for Dress/Skirt category")
             else:
                 garment_classes = {
-                    "male": ["menswear", "masculine clothing", "men's shirt", "men's suit", "clothing for men"],
-                    "female": ["womenswear", "feminine clothing", "woman's blouse", "female fashion", "feminine top", "clothing for women"]
+                    "male": ["menswear", "masculine clothing", "men's clothing", "boy's shirt", "suit"],
+                    "female": ["womenswear", "feminine clothing", "women's clothing", "blouse", "women's top"]
                 }
                 garment_gender = self.classify_advanced(garment_image, garment_classes)
             
@@ -90,10 +113,11 @@ class CrossCheckValidator:
             if person_gender == garment_gender:
                 return True, "Match success!", person_gender, garment_gender
             else:
-                return False, f"Gender mismatch: Person is {person_gender} but garment is {garment_gender}.", person_gender, garment_gender
+                return False, f"Gender mismatch: Person is {person_gender} but clothing is {garment_gender}.", person_gender, garment_gender
                 
         except Exception as e:
             print(f"❌ CLIP Validation Error: {str(e)}")
+            import traceback; traceback.print_exc()
             return True, f"Validation skipped: {str(e)}", "unknown", "unknown"
 
 # Singleton instance
@@ -109,3 +133,4 @@ def validate_gender_match(person_img, garment_img, category="tops"):
     """Entry point for fash_backend.py"""
     validator = get_validator()
     return validator.validate_match(person_img, garment_img, category)
+

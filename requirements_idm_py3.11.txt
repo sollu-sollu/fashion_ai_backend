@@ -1,0 +1,64 @@
+# =====================================================
+# IDM-VTON + AnyDoor + Fashn — Python 3.11 + CUDA 12.1
+# =====================================================
+#
+# INSTALL ORDER (copy-paste exactly):
+#
+#   py -3.11 -m venv .idm311
+#   .idm311\Scripts\activate
+#   pip install torch==2.4.0 torchvision==0.19.0 xformers --index-url https://download.pytorch.org/whl/cu121
+#   pip install -r requirements_idm.txt
+#   pip install git+https://github.com/openai/CLIP.git
+#
+# =====================================================
+
+# --- ML Core (compatible with torch 2.4.0) ---
+diffusers==0.25.1
+transformers==4.38.1
+accelerate==0.30.1
+safetensors==0.4.3
+tokenizers==0.15.2
+huggingface_hub==0.23.4
+
+# --- Numerical ---
+numpy==1.26.4
+scipy==1.13.1
+
+# --- Image Processing ---
+opencv-python==4.10.0.84
+pillow==10.4.0
+albumentations==1.4.11
+
+# --- AnyDoor ---
+open-clip-torch==2.24.0
+pytorch-lightning==2.3.3
+einops==0.8.0
+omegaconf==2.3.0
+antlr4-python3-runtime==4.9.3
+timm==0.9.16
+
+# --- IDM-VTON ---
+protobuf==5.27.2
+onnxruntime==1.18.1
+
+# --- Fashn-VTON ---
+fashn-human-parser==0.1.1
+
+# --- Flask API ---
+Flask==3.0.3
+pyngrok==7.2.0
+Werkzeug==3.0.3
+
+# --- CLIP deps ---
+ftfy==6.2.0
+regex==2024.5.15
+
+# --- Utilities ---
+matplotlib==3.9.1
+tqdm==4.66.4
+psutil==6.0.0
+PyYAML==6.0.1
+packaging==24.1
+typing_extensions==4.12.2
+filelock==3.15.4
+requests==2.32.3
