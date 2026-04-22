@@ -1,0 +1,106 @@
+# =====================================================
+# IDM-VTON + AnyDoor + Fashn — Python 3.10 + CUDA 11.8
+# =====================================================
+#
+# INSTALL ORDER (copy-paste exactly):
+#
+#   py -3.10 -m venv .idm310
+#   .idm310\Scripts\activate
+#   pip install torch==2.4.0 torchvision==0.19.0 xformers --index-url https://download.pytorch.org/whl/cu121
+#   pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2+cu118 --index-url https://download.pytorch.org/whl/cu118
+#   pip install -r requirements_idm.txt
+#   pip install git+https://github.com/openai/CLIP.git
+#   python -c "import torch; print(torch.__version__); print(torch.version.cuda)" //check torch+cuda version
+#   python -c "from torch.utils.cpp_extension import CUDA_HOME; print(CUDA_HOME)" //provides cuda location
+#   
+#   
+
+# git clone https://github.com/facebookresearch/detectron2.git
+# set DISTUTILS_USE_SDK=1
+# isntall vs community 2022
+# msvc 143, Windows10/11 sdk
+
+# in cmd
+# call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+# cl //run this to check and activate vcvars64.bat visual studio compiler.
+# set DISTUTILS_USE_SDK=1 //this is very important , run this after activating vcvars64.bat
+
+#   python -m pip install -e detectron2
+# 
+# =====================================================
+
+# =========================
+# CORE PYTORCH (CUDA 11.8)
+# =========================
+# torch==2.0.1+cu118
+# torchvision==0.15.2+cu118
+# torchaudio==2.0.2+cu118
+
+# =========================
+#  DIFFUSION / ML CORE
+# =========================
+diffusers==0.25.1
+transformers==4.38.1
+accelerate==0.30.1
+safetensors==0.4.3
+tokenizers==0.15.2
+huggingface_hub==0.23.4
+
+# =========================
+#  NUMERICAL
+# =========================
+numpy==1.26.4
+scipy==1.13.1
+
+# =========================
+#  IMAGE PROCESSING
+# =========================
+opencv-python==4.9.0.80
+pillow==10.3.0
+albumentations==1.4.4
+
+# =========================
+#  ANYDOOR / VTON BASE
+# =========================
+open-clip-torch==2.24.0
+pytorch-lightning==2.2.5
+einops==0.8.0
+omegaconf==2.3.0
+antlr4-python3-runtime==4.9.3
+timm==0.9.16
+
+# =========================
+#  IDM-VTON / ONNX
+# =========================
+protobuf==4.25.3
+onnxruntime-gpu==1.18.1
+
+# =========================
+#  FASHN VTON
+# =========================
+fashn-human-parser==0.1.1
+
+# =========================
+#  FLASK API
+# =========================
+Flask==3.0.3
+pyngrok==7.2.0
+Werkzeug==3.0.3
+
+# =========================
+#  TEXT / NLP UTILITIES
+# =========================
+ftfy==6.2.0
+regex==2024.5.15
+
+# =========================
+#  UTILITIES
+# =========================
+matplotlib==3.8.4
+tqdm==4.66.4
+psutil==6.0.0
+PyYAML==6.0.1
+packaging==24.1
+typing_extensions==4.12.2
+filelock==3.15.4
+requests==2.32.3
