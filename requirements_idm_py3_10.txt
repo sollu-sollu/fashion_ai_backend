@@ -108,3 +108,19 @@ packaging==24.1
 typing_extensions==4.12.2
 filelock==3.15.4
 requests==2.32.3
+
+
+# no module found for apply_net
+
+# pip uninstall detectron2 -y
+
+# pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+# once for the session
+# export PYTHONPATH=$PYTHONPATH:/datasets/jack-storage100/fashion_ai_backend/detectron2/projects/DensePose
+
+# for proper densepose install as package
+# cd detectron2/projects/DensePose
+# pip install -e .
+
+# pip install av
