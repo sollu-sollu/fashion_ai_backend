@@ -15,6 +15,10 @@
 #   
 #   
 
+#prebuiilt wheel for cu121
+# pip install torch==2.1.2 torchvision==0.16.2 xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+# pip install https://github.com/MiroPsota/torch_packages_builder/releases/download/detectron2-0.6%2B864913f/detectron2-0.6%2B864913fpt2.1.2cu121-cp310-cp310-linux_x86_64.whl
+
 # git clone https://github.com/facebookresearch/detectron2.git
 # set DISTUTILS_USE_SDK=1
 # isntall vs community 2022

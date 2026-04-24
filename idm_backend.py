@@ -65,6 +65,13 @@ class IDMVTONEngine:
             )
             from diffusers import DDPMScheduler, AutoencoderKL
 
+            # Load preprocessing models FIRST to avoid meta tensor corruption from diffusers
+            print("   ⏳ Loading Human Parsing + OpenPose...")
+            from preprocess.humanparsing.run_parsing import Parsing
+            from preprocess.openpose.run_openpose import OpenPose
+            self.parsing_model = Parsing(0)
+            self.openpose_model = OpenPose(0)
+
             # Load all model components
             print("   ⏳ Loading TryonNet UNet (13-channel)...")
             unet = UNet2DConditionModel.from_pretrained(
@@ -113,13 +120,6 @@ class IDMVTONEngine:
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
             ])
-
-            # Load preprocessing models
-            print("   ⏳ Loading Human Parsing + OpenPose...")
-            from preprocess.humanparsing.run_parsing import Parsing
-            from preprocess.openpose.run_openpose import OpenPose
-            self.parsing_model = Parsing(0)
-            self.openpose_model = OpenPose(0)
 
             self.ready = True
             print("   ✅ IDM_VTON Engine: READY")
