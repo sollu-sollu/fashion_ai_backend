@@ -9,7 +9,7 @@ import base64
 import threading
 import time
 import gc
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from flask import Flask, request, jsonify
 from pyngrok import ngrok
 from torchvision import transforms
@@ -130,7 +130,7 @@ class IDMVTONEngine:
             self.pipe = None
             self.ready = False
 
-    def __call__(self, person_image, garment_image, category="tops"):
+    def __call__(self, person_image, garment_image, category="tops", garment_desc=None):
         if not self.ready:
             return None
 
@@ -162,10 +162,20 @@ class IDMVTONEngine:
 
         # DensePose
         from detectron2.data.detection_utils import convert_PIL_to_numpy, _apply_exif_orientation
-        import apply_net
-
+        
         # Paths must be relative to IDM_VTON repo directory
         idm_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), IDM_REPO)
+        
+        # Force Python to load IDM-VTON's modified apply_net.py which does NOT require <input>
+        gradio_demo_dir = os.path.join(idm_dir, "gradio_demo")
+        if gradio_demo_dir not in sys.path:
+            sys.path.insert(0, gradio_demo_dir)
+        
+        import apply_net
+        import importlib
+        importlib.reload(apply_net)  # ensure we have the correct one
+
+        # Paths must be relative to IDM_VTON repo directory
         densepose_cfg = os.path.join(idm_dir, "configs", "densepose_rcnn_R_50_FPN_s1x.yaml")
         densepose_ckpt = os.path.join(idm_dir, "ckpt", "densepose", "model_final_162be9.pkl")
 
@@ -181,7 +191,8 @@ class IDMVTONEngine:
         pose_img = Image.fromarray(pose_img).resize((768, 1024))
 
         # Inference
-        garment_desc = category
+        if garment_desc is None:
+            garment_desc = category
         with torch.no_grad():
             with torch.cuda.amp.autocast():
                 prompt = "model is wearing " + garment_desc
@@ -262,7 +273,7 @@ class AnyDoorEngine:
         mask[y1:y2, x1:x2] = 255
         return mask
 
-    def __call__(self, person_image, garment_image, category="shoes"):
+    def __call__(self, person_image, garment_image, category="shoes", garment_desc=None):
         if not self.ready: return None
         try:
             print(f"   🎨 AnyDoor: Teleporting '{category}' onto person...")
@@ -303,6 +314,8 @@ class DualEngineVTON:
         self.device = device
         self.idm = None
         self.anydoor = None
+        self.blip_processor = None
+        self.blip_model = None
 
         print("\n" + "=" * 50)
         print("📊 (IDM-MODE) Dynamic Router Status:")
@@ -332,19 +345,99 @@ class DualEngineVTON:
             gc.collect()
             if torch.cuda.is_available(): torch.cuda.empty_cache()
 
-    def __call__(self, person_image, garment_image, category="tops"):
-        is_accessory = any(x in category.lower() for x in ["shoe", "bag", "hat", "accessory", "jewelry"])
+    def _generate_caption(self, garment_img, category):
+        if self.blip_model is None:
+            print("   🧠 Loading BLIP Captioner...")
+            from transformers import BlipProcessor, BlipForConditionalGeneration
+            self.blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+            self.blip_model = BlipForConditionalGeneration.from_pretrained(
+                "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
+            ).to(self.device)
+            
+        try:
+            inputs = self.blip_processor(garment_img, return_tensors="pt").to(self.device, torch.float16)
+            out = self.blip_model.generate(**inputs, max_new_tokens=20)
+            desc = self.blip_processor.decode(out[0], skip_special_tokens=True)
+            print(f"   📝 Auto-Caption: {desc}")
+            return desc
+        except Exception as e:
+            print(f"   ❌ BLIP Failed: {e}")
+            return category
 
+    def _segment_garment(self, garment_img, category):
+        w, h = garment_img.size
+        # 1. Semantic Extraction
+        if self.idm is not None and hasattr(self.idm, 'parsing_model'):
+            try:
+                parsed_image, _ = self.idm.parsing_model(garment_img.resize((384, 512)))
+                parse_array = np.array(parsed_image)
+                
+                cat_lower = category.lower()
+                if "top" in cat_lower or "upper" in cat_lower:
+                    targets = [4]
+                elif "bottom" in cat_lower or "lower" in cat_lower or "pant" in cat_lower:
+                    targets = [6, 5]
+                elif "dress" in cat_lower or "full" in cat_lower:
+                    targets = [7, 4, 5, 6]
+                else:
+                    targets = [4, 5, 6, 7]
+                    
+                mask = np.isin(parse_array, targets).astype(np.uint8) * 255
+                if np.sum(mask) > 1000:
+                    print("   ✂️ Semantic extraction successful (found person).")
+                    mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+                    kernel = np.ones((5,5), np.uint8)
+                    mask = cv2.dilate(mask, kernel, iterations=2)
+                    mask = cv2.erode(mask, kernel, iterations=2)
+                    
+                    rgba = garment_img.convert("RGBA")
+                    rgba.putalpha(Image.fromarray(mask).convert("L"))
+                    bbox = rgba.getbbox()
+                    if bbox: rgba = rgba.crop(bbox)
+                    
+                    bg = Image.new("RGB", rgba.size, (255, 255, 255))
+                    bg.paste(rgba, mask=rgba)
+                    return bg
+            except Exception as e:
+                print(f"   ❌ Semantic extraction failed: {e}")
+                
+        # 2. Rembg Fallback
+        print("   ✂️ Falling back to rembg for garment segmentation...")
+        try:
+            from rembg import remove
+            rgba = remove(garment_img.convert("RGBA"))
+            bbox = rgba.getbbox()
+            if bbox: rgba = rgba.crop(bbox)
+            bg = Image.new("RGB", rgba.size, (255, 255, 255))
+            bg.paste(rgba, mask=rgba)
+            return bg
+        except Exception as e:
+            print(f"   ❌ rembg failed: {e}")
+            return garment_img
+
+    def __call__(self, person_image, garment_image, category="tops", garment_desc=None):
+        is_accessory = any(x in category.lower() for x in ["shoe", "bag", "hat", "accessory", "accessories", "jewelry"])
+
+        # Load engine first so we have access to parsing_model
         if is_accessory:
             if self.anydoor is None:
                 self._unload_idm()
                 self.anydoor = AnyDoorEngine(self.device)
-            return self.anydoor(person_image, garment_image, category)
         else:
             if self.idm is None:
                 self._unload_anydoor()
                 self.idm = IDMVTONEngine(self.device)
-            return self.idm(person_image, garment_image, category)
+
+        print("   🔍 Enhancing garment image...")
+        garment_image = self._segment_garment(garment_image, category)
+        
+        if garment_desc is None or garment_desc.strip().lower() == category.lower():
+            garment_desc = self._generate_caption(garment_image, category)
+
+        if is_accessory:
+            return self.anydoor(person_image, garment_image, category, garment_desc)
+        else:
+            return self.idm(person_image, garment_image, category, garment_desc)
 
 
 # --- INITIALIZE ---
@@ -360,7 +453,8 @@ except Exception as e:
 # --- HELPERS ---
 def base64_to_image(b64):
     if "," in b64: b64 = b64.split(",")[1]
-    return Image.open(io.BytesIO(base64.b64decode(b64)))
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    return ImageOps.exif_transpose(img)
 
 def image_to_base64(img):
     buf = io.BytesIO()
@@ -379,6 +473,7 @@ def tryon():
         person_b64 = data.get("person")
         garment_b64 = data.get("garment")
         category = data.get("category", "tops")
+        garment_desc = data.get("garment_desc", category)
 
         if not person_b64 or not garment_b64:
             return jsonify({"success": False, "error": "Missing person or garment image"}), 400
@@ -403,7 +498,7 @@ def tryon():
         if not pipeline or not pipeline.ready:
             return jsonify({"success": False, "error": "No engine available"}), 500
 
-        result_img = pipeline(person_img, garment_img, category)
+        result_img = pipeline(person_img, garment_img, category, garment_desc)
 
         if result_img is None:
             return jsonify({"success": False, "error": "Inference returned no result"}), 500

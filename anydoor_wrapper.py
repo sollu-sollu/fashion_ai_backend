@@ -13,18 +13,13 @@ if anydoor_root not in sys.path:
     sys.path.append(anydoor_root)
 
 # Standard AnyDoor Imports
-try:
-    import open_clip
-    from cldm.model import create_model, load_state_dict
-    from cldm.ddim_hacked import DDIMSampler
-    from cldm.hack import disable_verbosity, enable_sliced_attention
-    from datasets.data_utils import * 
-    import albumentations as A
-    from omegaconf import OmegaConf
-except ImportError as e:
-    print(f"\n❌ AnyDoor Wrapper: Dependency missing: {e}")
-    print("👉 FIX: Run 'pip install open-clip-torch pytorch-lightning albumentations xformers'\n")
-    # Don't raise here, allow init_anydoor_model to handle the missing imports if called
+import open_clip
+from cldm.model import create_model, load_state_dict
+from cldm.ddim_hacked import DDIMSampler
+from cldm.hack import enable_sliced_attention
+from datasets.data_utils import * 
+import albumentations as A
+from omegaconf import OmegaConf
 
 _ANYDOOR_MODEL = None
 _DDIM_SAMPLER = None
@@ -40,8 +35,6 @@ def init_anydoor_model(anydoor_dir=None, device='cuda'):
         
     print(f"🔧 Wrapper: Initializing AnyDoor from {anydoor_dir}...")
     
-    disable_verbosity()
-    
     # Load Configs
     inference_yaml = os.path.join(anydoor_dir, 'configs', 'inference.yaml')
     config = OmegaConf.load(inference_yaml)
@@ -51,13 +44,9 @@ def init_anydoor_model(anydoor_dir=None, device='cuda'):
     
     # Model Config
     model_config_yaml = os.path.join(anydoor_dir, config.config_file)
-    model_config = OmegaConf.load(model_config_yaml)
-    
-    # Point DINOv2 to our local pth file
-    model_config.model.params.cond_stage_config.weight = os.path.join(anydoor_dir, "path", "dinov2_vitg14_pretrain.pth")
 
     # Construct Model
-    _ANYDOOR_MODEL = create_model(config_dict=model_config).cpu()
+    _ANYDOOR_MODEL = create_model(model_config_yaml).cpu()
     _ANYDOOR_MODEL.load_state_dict(load_state_dict(model_ckpt, location='cuda'))
     _ANYDOOR_MODEL = _ANYDOOR_MODEL.to(device)
     _DDIM_SAMPLER = DDIMSampler(_ANYDOOR_MODEL)
